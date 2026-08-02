@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>Block3D Studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg-0:#202124;
+  --bg-1:#26282c;
+  --bg-2:#2e3034;
+  --bg-3:#383a40;
+  --line:#1c1d20;
+  --accent:#5fadf0;
+  --accent-dim:#3d6f9c;
+  --warn:#e8a445;
+  --text:#d3d4d8;
+  --text-dim:#8a8d93;
+  --blk-event:#c2555f;
+  --blk-motion:#4c86c9;
+  --blk-control:#c78f3d;
+  --blk-look:#7a5fc4;
+  --blk-var:#4fa06a;
+  --axis-x:#ff5f6c;
+  --axis-y:#a1d33a;
+  --axis-z:#4b93f5;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;background:var(--bg-0);color:var(--text);overflow:hidden;font-size:13px;}
+#app{display:grid;grid-template-columns:220px 1fr 260px;grid-template-rows:40px 1fr 210px;height:100vh;}
+
+/* Top bar */
+#topbar{grid-column:1/4;background:var(--bg-1);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 10px;gap:8px;}
+#topbar .logo{font-weight:700;color:var(--accent);letter-spacing:.3px;margin-left:8px;font-size:13px;}
+#topbar .logo::before{content:"◆ ";}
+.tb-btn{background:var(--bg-2);border:1px solid var(--line);color:var(--text);padding:5px 12px;border-radius:3px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px;transition:.15s;}
+.tb-btn:hover{background:var(--bg-3);}
+.tb-btn.play{background:#4a9b5e;color:#fff;border-color:#4a9b5e;font-weight:600;}
+.tb-btn.play:hover{background:#59b370;}
+.tb-btn.stop{background:#c2555f;color:#fff;border-color:#c2555f;}
+#topbar .spacer{flex:1;}
+#topbar .hint{color:var(--text-dim);font-size:11px;}
+.tab-strip{display:flex;gap:2px;margin-right:10px;}
+.tab-strip button{background:transparent;border:none;color:var(--text-dim);padding:5px 12px;font-size:12px;border-radius:3px 3px 0 0;cursor:default;}
+.tab-strip button.active{background:var(--bg-2);color:var(--text);}
+
+/* Hierarchy panel */
+#hierarchy{grid-row:2/4;background:var(--bg-1);border-left:1px solid var(--line);overflow-y:auto;display:flex;flex-direction:column;}
+.panel-title{padding:9px 12px;font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line);background:var(--bg-2);}
+#addRow{display:flex;flex-wrap:wrap;gap:5px;padding:8px;border-bottom:1px solid var(--line);}
+#addRow button{flex:1 1 45%;background:var(--bg-2);border:1px solid var(--line);color:var(--text);padding:6px 4px;border-radius:5px;cursor:pointer;font-size:11.5px;}
+#addRow button:hover{background:var(--bg-3);border-color:var(--accent-dim);}
+#nodeList{flex:1;overflow-y:auto;padding:4px;}
+.node-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-dim);}
+.node-item:hover{background:var(--bg-2);}
+.node-item.selected{background:var(--accent-dim);color:#fff;}
+.node-icon{opacity:.8;}
+
+/* Viewport */
+#viewportWrap{position:relative;background:#3b3e46;grid-row:2;overflow:hidden;}
+#viewport{width:100%;height:100%;display:block;}
+#vpOverlay{position:absolute;top:6px;left:10px;background:rgba(38,40,44,.85);border:1px solid var(--line);border-radius:4px;padding:4px 9px;font-size:10.5px;color:var(--text-dim);}
+#runBadge{position:absolute;top:6px;left:50%;transform:translateX(-50%);background:#4a9b5e;color:#fff;padding:3px 14px;border-radius:4px;font-size:11px;font-weight:700;display:none;letter-spacing:.5px;}
+
+/* Godot-style viewport toolbar */
+#vpToolbar{position:absolute;top:6px;right:10px;display:flex;gap:2px;background:rgba(38,40,44,.85);border:1px solid var(--line);border-radius:4px;padding:3px;}
+#vpToolbar button{width:26px;height:26px;background:transparent;border:1px solid transparent;color:var(--text-dim);border-radius:3px;cursor:pointer;font-size:13px;}
+#vpToolbar button.active{background:var(--accent-dim);color:#fff;border-color:var(--accent);}
+#vpToolbar button:hover{background:var(--bg-3);}
+
+/* Axis gizmo (bottom-right like Godot) */
+#axisGizmo{position:absolute;bottom:8px;right:10px;width:90px;height:90px;pointer-events:none;}
+
+/* Grid coord labels */
+#gridLabel{position:absolute;bottom:8px;left:10px;background:rgba(38,40,44,.85);border:1px solid var(--line);border-radius:4px;padding:4px 9px;font-size:10px;color:var(--text-dim);display:flex;gap:8px;}
+#gridLabel span.ax{color:var(--axis-x);}
+#gridLabel span.ay{color:var(--axis-y);}
+#gridLabel span.az{color:var(--axis-z);}
+
+/* Virtual joystick & jump button (touch play controls) */
+#joystickBase{
+  position:absolute;bottom:18px;left:18px;width:100px;height:100px;border-radius:50%;
+  background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);display:none;touch-action:none;
+}
+#joystickKnob{
+  position:absolute;top:50%;left:50%;width:44px;height:44px;border-radius:50%;
+  background:rgba(95,173,240,.75);border:2px solid rgba(255,255,255,.5);
+  transform:translate(-50%,-50%);
+}
+#jumpBtn{
+  position:absolute;bottom:26px;right:22px;width:64px;height:64px;border-radius:50%;
+  background:rgba(74,155,94,.85);border:2px solid rgba(255,255,255,.5);color:#fff;
+  font-size:22px;display:none;touch-action:none;
+}
+
+/* Mobile bottom tab bar (hidden on desktop) */
+#mobileTabs{display:none;}
+.mt-btn{background:var(--bg-1);border:none;border-top:2px solid transparent;color:var(--text-dim);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:16px;}
+.mt-btn span{font-size:9px;}
+.mt-btn.active{color:var(--accent);border-top-color:var(--accent);background:var(--bg-2);}
+
+#specJoystickBase{
+  position:absolute;bottom:18px;left:18px;width:100px;height:100px;border-radius:50%;
+  background:rgba(95,173,240,.1);border:2px solid rgba(95,173,240,.4);display:none;touch-action:none;
+}
+#specJoystickKnob{
+  position:absolute;top:50%;left:50%;width:44px;height:44px;border-radius:50%;
+  background:rgba(95,173,240,.6);border:2px solid rgba(255,255,255,.5);
+  transform:translate(-50%,-50%);
+}
+#specHint{
+  position:absolute;top:44px;left:50%;transform:translateX(-50%);
+  background:rgba(38,40,44,.85);border:1px solid var(--line);border-radius:4px;
+  padding:5px 12px;font-size:11px;color:var(--text-dim);display:none;white-space:nowrap;
+}
+
+/* Inspector */
+#inspector{grid-row:2/4;background:var(--bg-1);border-right:1px solid var(--line);overflow-y:auto;}
+.insp-empty{padding:20px 14px;color:var(--text-dim);font-size:13px;text-align:center;}
+.insp-section{padding:10px 12px;border-bottom:1px solid var(--line);}
+.insp-section h4{margin:0 0 8px 0;font-size:11.5px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;}
+.field-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.field-row label{width:16px;font-size:12px;color:var(--text-dim);}
+.field-row input[type=number]{flex:1;background:var(--bg-2);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:4px 6px;width:0;font-size:12px;}
+.field-row input[type=color]{width:34px;height:26px;border:1px solid var(--line);border-radius:4px;background:none;padding:0;cursor:pointer;}
+.field-row input[type=text]{flex:1;background:var(--bg-2);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:4px 6px;font-size:12px;}
+#nameInput{width:100%;background:var(--bg-2);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:5px 8px;font-size:13px;}
+.del-btn{width:100%;background:#3a2226;color:#e88;border:1px solid #5a2e34;border-radius:5px;padding:6px;cursor:pointer;font-size:12px;margin-top:4px;}
+.del-btn:hover{background:#4a2a2f;}
+
+/* Block editor */
+#blockEditor{grid-column:1/4;grid-row:3;background:var(--bg-2);border-top:1px solid var(--line);display:grid;grid-template-columns:250px 1fr;overflow:hidden;}
+#palette{background:var(--bg-1);border-left:1px solid var(--line);overflow-y:auto;padding:8px;}
+.palette-group{margin-bottom:10px;}
+.palette-group-title{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin:4px 0 5px 2px;}
+.block{
+  padding:7px 10px;margin-bottom:5px;border-radius:6px;color:#fff;font-size:12.5px;cursor:grab;
+  box-shadow:0 1px 0 rgba(0,0,0,.3) inset;user-select:none;
+}
+.block:active{cursor:grabbing;}
+#canvas{position:relative;overflow:auto;background:
+  radial-gradient(circle, #34343c 1px, transparent 1px) 0 0/16px 16px, var(--bg-2);
+}
+#script-empty{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);color:var(--text-dim);font-size:13px;text-align:center;pointer-events:none;}
+#scriptStack{padding:16px;min-height:100%;position:relative;}
+.stack-block{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:7px 10px;margin-bottom:4px;border-radius:6px;color:#fff;font-size:12.5px;
+  position:relative;
+}
+.stack-block .close{
+  background:rgba(0,0,0,.25);border:none;color:#fff;width:16px;height:16px;border-radius:3px;cursor:pointer;font-size:11px;line-height:1;
+}
+.stack-block .edit-btn{
+  background:rgba(0,0,0,.2);border:none;color:#fff;width:16px;height:16px;border-radius:3px;cursor:pointer;font-size:9px;line-height:1;
+}
+.stack-block .edit-btn:first-of-type{margin-right:auto;}
+.stack-block input{
+  width:46px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:4px;padding:2px 5px;font-size:12px;text-align:center;
+}
+.stack-block select{
+  background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:4px;padding:2px 4px;font-size:12px;
+}
+.drop-hint{border:2px dashed var(--accent-dim);border-radius:6px;height:8px;margin:2px 0;opacity:0;transition:.1s;}
+.drop-hint.active{opacity:1;background:rgba(95,208,200,.15);height:24px;}
+
+/* ===== Mobile / landscape phones ===== */
+@media (max-width:900px), (max-height:480px){
+  html,body{font-size:11.5px;}
+  #app{grid-template-columns:1fr;grid-template-rows:32px 1fr 40px;}
+  #topbar{padding:0 4px;gap:4px;}
+  #topbar .logo{font-size:10.5px;margin-left:2px;}
+  #topbar .hint{display:none;}
+  .tab-strip{display:none;}
+  .tb-btn{padding:5px 10px;font-size:11px;}
+
+  #viewportWrap{grid-column:1;grid-row:2;}
+
+  #hierarchy, #inspector, #blockEditor{
+    grid-column:1;grid-row:2;
+    position:relative;z-index:20;
+    display:none;
+    border:none;
+  }
+  #hierarchy.mobile-show, #inspector.mobile-show, #blockEditor.mobile-show{display:flex;}
+  #blockEditor.mobile-show{display:grid;grid-template-columns:92px 1fr;}
+  #inspector.mobile-show{display:block;}
+
+  #mobileTabs{display:grid;grid-template-columns:repeat(4,1fr);grid-column:1;grid-row:3;border-top:1px solid var(--line);}
+
+  .panel-title{padding:5px 6px;font-size:10px;}
+  #addRow{padding:4px;gap:3px;}
+  #addRow button{font-size:9.5px;padding:6px 2px;flex:1 1 45%;}
+  .node-item{padding:6px 6px;font-size:11.5px;}
+  .insp-section{padding:7px 8px;}
+  .insp-section h4{font-size:9.5px;margin-bottom:5px;}
+  .field-row input[type=number]{padding:4px;font-size:11px;}
+  #palette{padding:4px;}
+  .palette-group-title{font-size:8.5px;}
+  .block{padding:6px 6px;font-size:10px;margin-bottom:3px;}
+  .stack-block{padding:6px 7px;font-size:11px;}
+  #axisGizmo{width:52px;height:52px;}
+  #vpOverlay,#gridLabel{padding:2px 6px;font-size:9px;}
+  #vpToolbar button{width:24px;height:24px;font-size:11px;}
+  #joystickBase{width:88px;height:88px;bottom:10px;left:10px;}
+  #joystickKnob{width:38px;height:38px;}
+  #jumpBtn{width:56px;height:56px;bottom:14px;right:14px;font-size:18px;}
+}
+@media (max-width:640px) and (orientation:landscape){
+  #app{grid-template-rows:28px 1fr 36px;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div class="logo">Block3D Studio</div>
+    <div class="tab-strip"><button class="active">المشهد ثلاثي الأبعاد</button><button disabled style="opacity:.35">السكربت</button></div>
+    <button class="tb-btn play" id="playBtn">▶ تشغيل</button>
+    <button class="tb-btn stop" id="stopBtn" style="display:none;">■ إيقاف</button>
+    <div class="spacer"></div>
+    <div class="hint">اسحب البلوكات إلى الأسفل لبرمجة الجسم المحدد — اسحب بالفأرة داخل المشهد للدوران، عجلة الفأرة للتقريب</div>
+  </div>
+
+  <div id="hierarchy">
+    <div class="panel-title">المشهد</div>
+    <div id="addRow">
+      <button data-add="box">+ مكعب</button>
+      <button data-add="sphere">+ كرة</button>
+      <button data-add="cylinder">+ أسطوانة</button>
+      <button data-add="cone">+ مخروط</button>
+      <button data-add="plane">+ أرضية</button>
+      <button data-add="torus">+ حلقة</button>
+    </div>
+    <div id="nodeList"></div>
+  </div>
+
+  <div id="viewportWrap">
+    <div id="viewport"></div>
+    <div id="runBadge">وضع التشغيل</div>
+    <div id="vpOverlay">FPS: <span id="fpsCount">60</span></div>
+    <div id="vpToolbar">
+      <button id="toolSelect" class="active" title="تحديد">◱</button>
+      <button id="toolMove" title="نقل">✛</button>
+      <button id="toolRotate" title="تدوير">↻</button>
+      <button id="toolScale" title="تحجيم">⤢</button>
+      <button id="toolSpectator" title="وضع المتفرج (تحرك حر)">🚀</button>
+    </div>
+    <canvas id="axisGizmo" width="90" height="90"></canvas>
+    <div id="gridLabel"><span class="ax">X</span><span class="ay">Y</span><span class="az">Z</span> شبكة 1م</div>
+    <div id="joystickBase"><div id="joystickKnob"></div></div>
+    <button id="jumpBtn">⤒</button>
+    <div id="specJoystickBase"><div id="specJoystickKnob"></div></div>
+    <div id="specHint">وضع المتفرج: اسحب للنظر حولك، استخدم العصا للتحرك (أو WASD+Q/E على الكمبيوتر)</div>
+  </div>
+
+  <div id="inspector"><div class="insp-empty">اختر جسمًا من المشهد لتعديل خصائصه</div></div>
+
+  <div id="blockEditor">
+    <div id="palette"></div>
+    <div id="canvas">
+      <div id="script-empty">اختر جسمًا، ثم اسحب بلوكًا من القائمة اليسرى إلى هنا لبرمجته</div>
+      <div id="scriptStack" style="display:none;"></div>
+    </div>
+  </div>
+  <div id="mobileTabs">
+    <button data-panel="hierarchy" class="mt-btn">🧍<span>المشهد</span></button>
+    <button data-panel="inspector" class="mt-btn">🎛<span>الخصائص</span></button>
+    <button data-panel="blockEditor" class="mt-btn active">🧩<span>البلوكات</span></button>
+    <button data-panel="none" class="mt-btn">🖥<span>العرض</span></button>
+  </div>
+
+</div>
+
+<script>
+/* ============ CORE STATE ============ */
+let scene, camera, renderer, raycaster, mouse;
+let objects = []; // {id, name, type, mesh, script:[blocks]}
+let selectedId = null;
+let idCounter = 1;
+let running = false;
+let joystick = {x:0, z:0};
+let jumpPressed = false;
+let followTargetObj = null, followDist = 8;
+let orbit = {theta:0.9, phi:1.0, radius:11, target:new THREE.Vector3(0,0.5,0)};
+let dragState = null;
+
+const viewportEl = document.getElementById('viewport');
+
+/* ============ MOBILE PANEL TABS ============ */
+const mobilePanels = {hierarchy:document.getElementById('hierarchy'), inspector:document.getElementById('inspector'), blockEditor:document.getElementById('blockEditor')};
+document.querySelectorAll('.mt-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.mt-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    Object.values(mobilePanels).forEach(p=>p.classList.remove('mobile-show'));
+    const key = btn.dataset.panel;
+    if(mobilePanels[key]) mobilePanels[key].classList.add('mobile-show');
+  });
+});
+mobilePanels.blockEditor.classList.add('mobile-show');
+
+/* ============ AXIS GIZMO ============ */
+const gizmoCanvas = document.getElementById('axisGizmo');
+const gizmoCtx = gizmoCanvas.getContext('2d');
+function drawGizmo(){
+  const W = gizmoCanvas.width, H = gizmoCanvas.height;
+  gizmoCtx.clearRect(0,0,W,H);
+  const cx=W/2, cy=H/2, len=W*0.34;
+  // camera direction basis derived from orbit angles
+  const {theta,phi} = orbit;
+  const dir = new THREE.Vector3(Math.sin(phi)*Math.sin(theta), Math.cos(phi), Math.sin(phi)*Math.cos(theta));
+  const camPos = dir.clone();
+  const up = new THREE.Vector3(0,1,0);
+  const camMat = new THREE.Matrix4().lookAt(camPos, new THREE.Vector3(0,0,0), up);
+  const quat = new THREE.Quaternion().setFromRotationMatrix(camMat).invert();
+  const axes = [
+    {v:new THREE.Vector3(1,0,0), col:'#ff5f6c', neg:'#7a3038', label:'X'},
+    {v:new THREE.Vector3(0,1,0), col:'#a1d33a', neg:'#556b23', label:'Y'},
+    {v:new THREE.Vector3(0,0,1), col:'#4b93f5', neg:'#2c4c7a', label:'Z'},
+  ];
+  const proj = axes.map(a=>{
+    const p = a.v.clone().applyQuaternion(quat);
+    return {x:cx+p.x*len, y:cy-p.y*len, z:p.z, col:a.col, neg:a.neg, label:a.label};
+  });
+  // draw negative stubs first
+  proj.forEach(p=>{
+    gizmoCtx.beginPath();
+    gizmoCtx.moveTo(cx,cy);
+    gizmoCtx.lineTo(cx-(p.x-cx)*0.55, cy-(p.y-cy)*0.55);
+    gizmoCtx.strokeStyle = p.neg;
+    gizmoCtx.lineWidth=2;
+    gizmoCtx.stroke();
+    gizmoCtx.beginPath();
+    gizmoCtx.arc(cx-(p.x-cx)*0.55, cy-(p.y-cy)*0.55, 5, 0, 7);
+    gizmoCtx.fillStyle = p.neg;
+    gizmoCtx.fill();
+  });
+  // sort positive axes by depth (z) so closer drawn last
+  proj.sort((a,b)=>a.z-b.z);
+  proj.forEach(p=>{
+    gizmoCtx.beginPath();
+    gizmoCtx.moveTo(cx,cy);
+    gizmoCtx.lineTo(p.x,p.y);
+    gizmoCtx.strokeStyle = p.col;
+    gizmoCtx.lineWidth=2.5;
+    gizmoCtx.stroke();
+    gizmoCtx.beginPath();
+    gizmoCtx.arc(p.x,p.y,9,0,7);
+    gizmoCtx.fillStyle = p.col;
+    gizmoCtx.fill();
+    gizmoCtx.fillStyle='#1a1a1c';
+    gizmoCtx.font='bold 10px sans-serif';
+    gizmoCtx.textAlign='center';
+    gizmoCtx.textBaseline='middle';
+    gizmoCtx.fillText(p.label, p.x, p.y);
+  });
+}
+
+/* ============ TRANSFORM TOOL STATE ============ */
+let activeTool = 'select';
+['toolSelect','toolMove','toolRotate','toolScale'].forEach(id=>{
+  document.getElementById(id).addEventListener('click', ()=>{
+    activeTool = id.replace('tool','').toLowerCase();
+    document.querySelectorAll('#vpToolbar button').forEach(b=>b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  });
+});
+
+/* ============ SPECTATOR (FLY) MODE ============ */
+let spectatorMode = false;
+let spectator = {pos:new THREE.Vector3(6,4,8), yaw:-2.7, pitch:-0.35};
+const keysDown = {};
+window.addEventListener('keydown', e=>{ keysDown[e.code]=true; });
+window.addEventListener('keyup', e=>{ keysDown[e.code]=false; });
+
+document.getElementById('toolSpectator').addEventListener('click', ()=>{
+  spectatorMode = !spectatorMode;
+  document.getElementById('toolSpectator').classList.toggle('active', spectatorMode);
+  document.getElementById('specJoystickBase').style.display = spectatorMode ? 'block' : 'none';
+  document.getElementById('specHint').style.display = spectatorMode ? 'block' : 'none';
+  if(spectatorMode){
+    // seed spectator from current orbit camera so the transition feels continuous
+    spectator.pos.copy(camera.position);
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    spectator.yaw = Math.atan2(dir.x, dir.z)*-1 + Math.PI/2;
+    spectator.pitch = Math.asin(THREE.MathUtils.clamp(dir.y,-1,1));
+  } else {
+    orbit.target.copy(spectator.pos).addScaledVector(getSpectatorForward(), 6);
+    orbit.radius = 8;
+    orbit.theta = Math.atan2(camera.position.x-orbit.target.x, camera.position.z-orbit.target.z);
+  }
+  updateCamera();
+});
+function getSpectatorForward(){
+  return new THREE.Vector3(
+    Math.sin(spectator.yaw)*Math.cos(spectator.pitch),
+    Math.sin(spectator.pitch),
+    Math.cos(spectator.yaw)*Math.cos(spectator.pitch)
+  );
+}
+function applySpectatorMovement(dt){
+  const speed = (keysDown['ShiftLeft']||keysDown['ShiftRight']) ? 9 : 4.5;
+  const fwd = getSpectatorForward();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0,1,0)).normalize();
+  let mx=0, mz=0;
+  if(keysDown['KeyW']||keysDown['ArrowUp']) mz+=1;
+  if(keysDown['KeyS']||keysDown['ArrowDown']) mz-=1;
+  if(keysDown['KeyD']||keysDown['ArrowRight']) mx+=1;
+  if(keysDown['KeyA']||keysDown['ArrowLeft']) mx-=1;
+  mx += specJoystick.x; mz -= specJoystick.z;
+  spectator.pos.addScaledVector(fwd, mz*speed*dt);
+  spectator.pos.addScaledVector(right, mx*speed*dt);
+  if(keysDown['KeyE']||keysDown['Space']) spectator.pos.y += speed*dt;
+  if(keysDown['KeyQ']||keysDown['ControlLeft']) spectator.pos.y -= speed*dt;
+  camera.position.copy(spectator.pos);
+  camera.lookAt(spectator.pos.clone().add(fwd));
+}
+
+/* Spectator virtual joystick (touch move) */
+let specJoystick = {x:0, z:0};
+const specJoyBase = document.getElementById('specJoystickBase');
+const specJoyKnob = document.getElementById('specJoystickKnob');
+let specJoyActive=false, specJoyId=null, specJoyCenter={x:0,y:0};
+function specJoyStart(x,y,id){
+  specJoyActive=true; specJoyId=id;
+  const r = specJoyBase.getBoundingClientRect();
+  specJoyCenter = {x:r.left+r.width/2, y:r.top+r.height/2};
+}
+function specJoyMove(x,y){
+  if(!specJoyActive) return;
+  let dx=x-specJoyCenter.x, dy=y-specJoyCenter.y;
+  const max=34;
+  const dist=Math.min(Math.hypot(dx,dy),max);
+  const ang=Math.atan2(dy,dx);
+  const kx=Math.cos(ang)*dist, ky=Math.sin(ang)*dist;
+  specJoyKnob.style.transform = `translate(${kx-22}px, ${ky-22}px)`;
+  specJoystick.x = kx/max; specJoystick.z = ky/max;
+}
+function specJoyEnd(){
+  specJoyActive=false; specJoyId=null;
+  specJoyKnob.style.transform='translate(-50%,-50%)';
+  specJoystick.x=0; specJoystick.z=0;
+}
+specJoyBase.addEventListener('mousedown', e=>specJoyStart(e.clientX,e.clientY,'mouse'));
+window.addEventListener('mousemove', e=>{ if(specJoyId==='mouse') specJoyMove(e.clientX,e.clientY); });
+window.addEventListener('mouseup', ()=>{ if(specJoyId==='mouse') specJoyEnd(); });
+specJoyBase.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; specJoyStart(t.clientX,t.clientY,t.identifier); e.preventDefault(); }, {passive:false});
+specJoyBase.addEventListener('touchmove', e=>{
+  for(const t of e.changedTouches){ if(t.identifier===specJoyId) specJoyMove(t.clientX,t.clientY); }
+  e.preventDefault();
+}, {passive:false});
+specJoyBase.addEventListener('touchend', e=>{
+  for(const t of e.changedTouches){ if(t.identifier===specJoyId) specJoyEnd(); }
+}, {passive:false});
+
+/* ============ INIT THREE ============ */
+function initThree(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0e0e11);
+  scene.fog = new THREE.Fog(0x0e0e11, 15, 40);
+
+  camera = new THREE.PerspectiveCamera(55, viewportEl.clientWidth/viewportEl.clientHeight, 0.1, 1000);
+
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(viewportEl.clientWidth, viewportEl.clientHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled = true;
+  viewportEl.appendChild(renderer.domElement);
+
+  // lights
+  const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x222226, 0.7);
+  scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(6,10,4);
+  dir.castShadow = true;
+  dir.shadow.mapSize.set(1024,1024);
+  dir.shadow.camera.left=-12; dir.shadow.camera.right=12; dir.shadow.camera.top=12; dir.shadow.camera.bottom=-12;
+  scene.add(dir);
+
+  // grid
+  const grid = new THREE.GridHelper(30, 30, 0x3a8b85, 0x2a2a30);
+  scene.add(grid);
+
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
+
+  updateCamera();
+  animate();
+  window.addEventListener('resize', onResize);
+  setupOrbitControls();
+  renderer.domElement.addEventListener('click', onClickViewport);
+}
+
+function updateCamera(){
+  if(spectatorMode){
+    camera.position.copy(spectator.pos);
+    camera.lookAt(spectator.pos.clone().add(getSpectatorForward()));
+    return;
+  }
+  const {theta,phi,radius,target} = orbit;
+  camera.position.set(
+    target.x + radius*Math.sin(phi)*Math.sin(theta),
+    target.y + radius*Math.cos(phi),
+    target.z + radius*Math.sin(phi)*Math.cos(theta)
+  );
+  camera.lookAt(target);
+}
+
+function setupOrbitControls(){
+  const dom = renderer.domElement;
+  let dragging=false, lastX=0,lastY=0, panMode=false;
+
+  function onDragStart(x,y,isPan){
+    dragging=true; lastX=x; lastY=y; panMode=isPan;
+  }
+  function onDragMove(x,y){
+    if(!dragging) return;
+    const dx=x-lastX, dy=y-lastY;
+    lastX=x; lastY=y;
+    const obj = objects.find(o=>o.id===selectedId);
+    if(spectatorMode){
+      spectator.yaw -= dx*0.006;
+      spectator.pitch = Math.min(Math.max(spectator.pitch - dy*0.006, -1.5), 1.5);
+      updateCamera();
+      return;
+    }
+    if(activeTool==='move' && obj && !panMode && !running){
+      const speed = orbit.radius*0.0025;
+      const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
+      const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0,1,0)).normalize();
+      obj.mesh.position.addScaledVector(right, dx*speed);
+      obj.mesh.position.addScaledVector(fwd, -dy*speed);
+      obj.startPos.copy(obj.mesh.position);
+      renderInspector();
+    } else if(activeTool==='rotate' && obj && !panMode && !running){
+      obj.mesh.rotation.y += dx*0.01;
+      obj.startRot.copy(obj.mesh.rotation);
+      renderInspector();
+    } else if(activeTool==='scale' && obj && !panMode && !running){
+      const s = Math.max(0.05, obj.mesh.scale.x + dx*0.01);
+      obj.mesh.scale.set(s,s,s);
+      renderInspector();
+    } else if(panMode){
+      const panSpeed = orbit.radius*0.0015;
+      const right = new THREE.Vector3(); camera.getWorldDirection(right);
+      const camRight = new THREE.Vector3().crossVectors(camera.up, right).normalize();
+      orbit.target.addScaledVector(camRight, dx*panSpeed);
+      orbit.target.y += dy*panSpeed;
+    } else {
+      orbit.theta -= dx*0.007;
+      orbit.phi = Math.min(Math.max(orbit.phi - dy*0.007, 0.15), Math.PI-0.15);
+    }
+    updateCamera();
+  }
+  function onDragEnd(){ dragging=false; }
+
+  dom.addEventListener('mousedown', e=>onDragStart(e.clientX,e.clientY, e.button===2));
+  window.addEventListener('mouseup', onDragEnd);
+  window.addEventListener('mousemove', e=>onDragMove(e.clientX,e.clientY));
+  dom.addEventListener('contextmenu', e=>e.preventDefault());
+  dom.addEventListener('wheel', e=>{
+    e.preventDefault();
+    orbit.radius = Math.min(Math.max(orbit.radius + e.deltaY*0.01, 2), 60);
+    updateCamera();
+  }, {passive:false});
+
+  // Touch: one finger = orbit/look/tool-drag, two fingers = pinch zoom + pan
+  let pinchStartDist = null, pinchStartRadius = null;
+  dom.addEventListener('touchstart', e=>{
+    if(e.touches.length===1){
+      onDragStart(e.touches[0].clientX, e.touches[0].clientY, false);
+    } else if(e.touches.length===2){
+      dragging=false;
+      pinchStartDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      pinchStartRadius = orbit.radius;
+    }
+    e.preventDefault();
+  }, {passive:false});
+  dom.addEventListener('touchmove', e=>{
+    if(e.touches.length===1 && dragging){
+      onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+    } else if(e.touches.length===2 && pinchStartDist!==null){
+      const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      if(!spectatorMode){
+        orbit.radius = Math.min(Math.max(pinchStartRadius*(pinchStartDist/d), 2), 60);
+        updateCamera();
+      }
+    }
+    e.preventDefault();
+  }, {passive:false});
+  dom.addEventListener('touchend', e=>{
+    if(e.touches.length===0){ onDragEnd(); pinchStartDist=null; }
+  }, {passive:false});
+}
+
+function onResize(){
+  camera.aspect = viewportEl.clientWidth/viewportEl.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(viewportEl.clientWidth, viewportEl.clientHeight);
+}
+
+function onClickViewport(e){
+  if(running) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX-rect.left)/rect.width)*2-1;
+  mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = objects.map(o=>o.mesh);
+  const hits = raycaster.intersectObjects(meshes);
+  if(hits.length){
+    const hitMesh = hits[0].object;
+    const obj = objects.find(o=>o.mesh===hitMesh);
+    selectNode(obj.id);
+  } else {
+    selectNode(null);
+  }
+}
+
+let clock = new THREE.Clock();
+let fpsAcc=0, fpsFrames=0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  fpsAcc+=dt; fpsFrames++;
+  if(fpsAcc>0.5){ document.getElementById('fpsCount').textContent = Math.round(fpsFrames/fpsAcc); fpsAcc=0; fpsFrames=0; }
+  if(spectatorMode) applySpectatorMovement(dt);
+  if(running){
+    followTargetObj = null;
+    objects.forEach(o=>runObjectFrame(o, dt));
+    const toRemove = objects.filter(o=>o._markDestroy);
+    if(toRemove.length){
+      toRemove.forEach(o=>{ scene.remove(o.mesh); if(o._bubbleEl) o._bubbleEl.remove(); });
+      objects = objects.filter(o=>!o._markDestroy);
+      renderHierarchy();
+      if(selectedId && toRemove.some(o=>o.id===selectedId)) selectNode(null);
+    }
+    if(followTargetObj){
+      orbit.target.lerp(followTargetObj.mesh.position, 0.15);
+      orbit.radius = THREE.MathUtils.lerp(orbit.radius, followDist, 0.1);
+      updateCamera();
+    }
+    jumpPressed = false;
+  }
+  renderer.render(scene, camera);
+  drawGizmo();
+}
+
+/* ============ OBJECT CREATION ============ */
+const TYPE_META = {
+  box:{label:'مكعب', icon:'▧', color:0x4c86c9},
+  sphere:{label:'كرة', icon:'●', color:0xc2555f},
+  cylinder:{label:'أسطوانة', icon:'▮', color:0xc78f3d},
+  cone:{label:'مخروط', icon:'▲', color:0x7a5fc4},
+  plane:{label:'أرضية', icon:'▭', color:0x4fa06a},
+  torus:{label:'حلقة', icon:'◎', color:0x5fd0c8},
+};
+
+function makeGeometry(type){
+  switch(type){
+    case 'box': return new THREE.BoxGeometry(1,1,1);
+    case 'sphere': return new THREE.SphereGeometry(0.65,24,18);
+    case 'cylinder': return new THREE.CylinderGeometry(0.6,0.6,1.2,20);
+    case 'cone': return new THREE.ConeGeometry(0.65,1.3,20);
+    case 'plane': return new THREE.BoxGeometry(4,0.15,4);
+    case 'torus': return new THREE.TorusGeometry(0.55,0.22,16,32);
+  }
+}
+
+function addObject(type){
+  const meta = TYPE_META[type];
+  const geo = makeGeometry(type);
+  const mat = new THREE.MeshStandardMaterial({color: meta.color, roughness:0.55, metalness:0.1});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true; mesh.receiveMesh = true; mesh.receiveShadow = true;
+  const y = type==='plane' ? -0.1 : 0.6;
+  mesh.position.set((objects.length%5)*1.6-3.2, y, 0);
+  scene.add(mesh);
+
+  const id = 'n'+(idCounter++);
+  const obj = {
+    id, type, name: meta.label+' '+id.slice(1),
+    mesh, script:[],
+    startPos: mesh.position.clone(),
+    startRot: mesh.rotation.clone(),
+    vars: {}
+  };
+  objects.push(obj);
+  renderHierarchy();
+  selectNode(id);
+}
+
+function deleteObject(id){
+  const idx = objects.findIndex(o=>o.id===id);
+  if(idx<0) return;
+  scene.remove(objects[idx].mesh);
+  objects.splice(idx,1);
+  if(selectedId===id) selectNode(null);
+  renderHierarchy();
+}
+
+/* ============ HIERARCHY PANEL ============ */
+function renderHierarchy(){
+  const list = document.getElementById('nodeList');
+  list.innerHTML='';
+  objects.forEach(o=>{
+    const meta = TYPE_META[o.type];
+    const div = document.createElement('div');
+    div.className='node-item'+(o.id===selectedId?' selected':'');
+    div.innerHTML = `<span class="node-icon">${meta.icon}</span><span>${o.name}</span>`;
+    div.onclick = ()=>selectNode(o.id);
+    list.appendChild(div);
+  });
+}
+
+function selectNode(id){
+  selectedId = id;
+  renderHierarchy();
+  renderInspector();
+  renderScriptArea();
+}
+
+/* ============ INSPECTOR ============ */
+function renderInspector(){
+  const panel = document.getElementById('inspector');
+  const obj = objects.find(o=>o.id===selectedId);
+  if(!obj){ panel.innerHTML = '<div class="insp-empty">اختر جسمًا من المشهد لتعديل خصائصه</div>'; return; }
+  panel.innerHTML = `
+    <div class="insp-section">
+      <h4>الاسم</h4>
+      <input id="nameInput" type="text" value="${obj.name}">
+    </div>
+    <div class="insp-section">
+      <h4>الموضع</h4>
+      <div class="field-row"><label>X</label><input type="number" step="0.1" id="posX" value="${obj.mesh.position.x.toFixed(2)}"></div>
+      <div class="field-row"><label>Y</label><input type="number" step="0.1" id="posY" value="${obj.mesh.position.y.toFixed(2)}"></div>
+      <div class="field-row"><label>Z</label><input type="number" step="0.1" id="posZ" value="${obj.mesh.position.z.toFixed(2)}"></div>
+    </div>
+    <div class="insp-section">
+      <h4>الدوران (درجة)</h4>
+      <div class="field-row"><label>X</label><input type="number" step="1" id="rotX" value="${THREE.MathUtils.radToDeg(obj.mesh.rotation.x).toFixed(0)}"></div>
+      <div class="field-row"><label>Y</label><input type="number" step="1" id="rotY" value="${THREE.MathUtils.radToDeg(obj.mesh.rotation.y).toFixed(0)}"></div>
+      <div class="field-row"><label>Z</label><input type="number" step="1" id="rotZ" value="${THREE.MathUtils.radToDeg(obj.mesh.rotation.z).toFixed(0)}"></div>
+    </div>
+    <div class="insp-section">
+      <h4>الحجم</h4>
+      <div class="field-row"><label>X</label><input type="number" step="0.1" id="scX" value="${obj.mesh.scale.x.toFixed(2)}"></div>
+      <div class="field-row"><label>Y</label><input type="number" step="0.1" id="scY" value="${obj.mesh.scale.y.toFixed(2)}"></div>
+      <div class="field-row"><label>Z</label><input type="number" step="0.1" id="scZ" value="${obj.mesh.scale.z.toFixed(2)}"></div>
+    </div>
+    <div class="insp-section">
+      <h4>اللون</h4>
+      <div class="field-row"><input type="color" id="colorInput" value="#${obj.mesh.material.color.getHexString()}"></div>
+    </div>
+    <div class="insp-section">
+      <button class="del-btn" id="deleteBtn">🗑 حذف الجسم</button>
+    </div>
+  `;
+  const bind = (id, fn)=>document.getElementById(id).addEventListener('input', fn);
+  bind('nameInput', e=>{ obj.name=e.target.value; renderHierarchy(); });
+  bind('posX', e=>{ obj.mesh.position.x=parseFloat(e.target.value)||0; obj.startPos.copy(obj.mesh.position); });
+  bind('posY', e=>{ obj.mesh.position.y=parseFloat(e.target.value)||0; obj.startPos.copy(obj.mesh.position); });
+  bind('posZ', e=>{ obj.mesh.position.z=parseFloat(e.target.value)||0; obj.startPos.copy(obj.mesh.position); });
+  bind('rotX', e=>{ obj.mesh.rotation.x=THREE.MathUtils.degToRad(parseFloat(e.target.value)||0); obj.startRot.copy(obj.mesh.rotation); });
+  bind('rotY', e=>{ obj.mesh.rotation.y=THREE.MathUtils.degToRad(parseFloat(e.target.value)||0); obj.startRot.copy(obj.mesh.rotation); });
+  bind('rotZ', e=>{ obj.mesh.rotation.z=THREE.MathUtils.degToRad(parseFloat(e.target.value)||0); obj.startRot.copy(obj.mesh.rotation); });
+  bind('scX', e=>{ obj.mesh.scale.x=parseFloat(e.target.value)||0.01; });
+  bind('scY', e=>{ obj.mesh.scale.y=parseFloat(e.target.value)||0.01; });
+  bind('scZ', e=>{ obj.mesh.scale.z=parseFloat(e.target.value)||0.01; });
+  bind('colorInput', e=>{ obj.mesh.material.color.set(e.target.value); });
+  document.getElementById('deleteBtn').onclick = ()=>deleteObject(obj.id);
+}
+
+document.getElementById('addRow').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-add]');
+  if(btn) addObject(btn.dataset.add);
+});
+
+/* ============ BLOCK DEFINITIONS ============ */
+/*
+Each block type: {type, group, color, label(html-ish with placeholders), fields:[{key,type,default}], hasBody? for control blocks}
+*/
+const BLOCK_DEFS = {
+  onStart:   {group:'events', color:'var(--blk-event)', label:'عند بدء التشغيل', fields:[]},
+  onClick:   {group:'events', color:'var(--blk-event)', label:'عند النقر على الجسم', fields:[]},
+
+  moveBy:    {group:'motion', color:'var(--blk-motion)', label:'تحرك س:{x} ص:{y} ع:{z} في الثانية، لمدة {t} ث',
+              fields:[{key:'x',type:'num',default:1},{key:'y',type:'num',default:0},{key:'z',type:'num',default:0},{key:'t',type:'num',default:1}]},
+  rotateBy:  {group:'motion', color:'var(--blk-motion)', label:'دوّر حول {axis} بسرعة {deg} د/ث، لمدة {t} ث',
+              fields:[{key:'axis',type:'select',options:['X','Y','Z'],default:'Y'},{key:'deg',type:'num',default:90},{key:'t',type:'num',default:1}]},
+  goTo:      {group:'motion', color:'var(--blk-motion)', label:'اذهب إلى س:{x} ص:{y} ع:{z} خلال {t} ث',
+              fields:[{key:'x',type:'num',default:0},{key:'y',type:'num',default:1},{key:'z',type:'num',default:0},{key:'t',type:'num',default:1}]},
+  bounce:    {group:'motion', color:'var(--blk-motion)', label:'ارتد ارتفاع {h} سرعة {s}، لمدة {t} ث',
+              fields:[{key:'h',type:'num',default:1},{key:'s',type:'num',default:2},{key:'t',type:'num',default:2}]},
+
+  wait:      {group:'control', color:'var(--blk-control)', label:'انتظر {t} ثانية',
+              fields:[{key:'t',type:'num',default:1}]},
+  repeat:    {group:'control', color:'var(--blk-control)', label:'كرر ما سبق {n} مرة ثم توقف',
+              fields:[{key:'n',type:'num',default:3}]},
+  loopForever:{group:'control', color:'#8a4a4a', label:'⚠ كرر للأبد (لا يتوقف تلقائيًا)', fields:[]},
+  stopScript:{group:'control', color:'var(--blk-control)', label:'أوقف السكربت الآن', fields:[]},
+
+  setColor:  {group:'look', color:'var(--blk-look)', label:'غيّر اللون إلى {c}', fields:[{key:'c',type:'color',default:'#5fd0c8'}]},
+  setScale:  {group:'look', color:'var(--blk-look)', label:'اضبط الحجم إلى {s}', fields:[{key:'s',type:'num',default:1}]},
+  pulse:     {group:'look', color:'var(--blk-look)', label:'نبض بمقدار {amt} سرعة {spd}، لمدة {t} ث',
+              fields:[{key:'amt',type:'num',default:0.2},{key:'spd',type:'num',default:3},{key:'t',type:'num',default:2}]},
+  fadeOpacity:{group:'look', color:'var(--blk-look)', label:'غيّر الشفافية إلى {o} خلال {t} ث',
+              fields:[{key:'o',type:'num',default:0.3},{key:'t',type:'num',default:1}]},
+  sayText:   {group:'look', color:'var(--blk-look)', label:'قل "{text}" لمدة {t} ث',
+              fields:[{key:'text',type:'text',default:'مرحبًا!'},{key:'t',type:'num',default:2}]},
+
+  idleBreathe:{group:'anim', color:'var(--blk-var)', label:'تنفّس بمقدار {amt} سرعة {spd}، لمدة {t} ث',
+              fields:[{key:'amt',type:'num',default:0.06},{key:'spd',type:'num',default:2},{key:'t',type:'num',default:2}]},
+  walkBob:   {group:'anim', color:'var(--blk-var)', label:'مشية ارتفاع {h} سرعة {spd}، لمدة {t} ث',
+              fields:[{key:'h',type:'num',default:0.12},{key:'spd',type:'num',default:6},{key:'t',type:'num',default:2}]},
+  jumpOnce:  {group:'anim', color:'var(--blk-var)', label:'قفزة واحدة بارتفاع {h} ومدة {t} ث',
+              fields:[{key:'h',type:'num',default:1.2},{key:'t',type:'num',default:0.6}]},
+  spinTurn:  {group:'anim', color:'var(--blk-var)', label:'لفّة كاملة 360° بسرعة {spd} د/ث ثم توقف',
+              fields:[{key:'spd',type:'num',default:180}]},
+  squash:    {group:'anim', color:'var(--blk-var)', label:'اهتزاز مطاطي قوة {amt} سرعة {spd}، لمدة {t} ث',
+              fields:[{key:'amt',type:'num',default:0.15},{key:'spd',type:'num',default:5},{key:'t',type:'num',default:1.5}]},
+  lookAt:    {group:'anim', color:'var(--blk-var)', label:'انظر نحو س:{x} ص:{y} ع:{z} خلال {t} ث',
+              fields:[{key:'x',type:'num',default:0},{key:'y',type:'num',default:0},{key:'z',type:'num',default:0},{key:'t',type:'num',default:1}]},
+  destroySelf:{group:'anim', color:'#8a4a4a', label:'احذف هذا الجسم من المشهد', fields:[]},
+
+  playerControl:{group:'player', color:'#3d7a5c', label:'تحكم اللاعب: سرعة مشي {spd}', fields:[{key:'spd',type:'num',default:3}]},
+  cameraFollow:{group:'player', color:'#3d7a5c', label:'تتبع الكاميرا لهذا الجسم بمسافة {dist}', fields:[{key:'dist',type:'num',default:8}]},
+  jumpButton:{group:'player', color:'#3d7a5c', label:'زر القفز: ارتفاع {h}', fields:[{key:'h',type:'num',default:2}]},
+};
+
+const GROUP_LABEL = {events:'الأحداث', motion:'حركة', control:'تحكم', look:'مظهر', anim:'تحريك وشخصيات', player:'تحكم اللاعب'};
+const INSTANT_BLOCKS = new Set(['setColor','setScale','stopScript','destroySelf']);
+const NONSEQUENCE_GROUPS = new Set(['events','player']);
+
+function buildPalette(){
+  const palette = document.getElementById('palette');
+  const groups = {};
+  Object.entries(BLOCK_DEFS).forEach(([key,def])=>{
+    (groups[def.group] ||= []).push({key,...def});
+  });
+  Object.entries(groups).forEach(([gname, blocks])=>{
+    const wrap = document.createElement('div');
+    wrap.className='palette-group';
+    wrap.innerHTML = `<div class="palette-group-title">${GROUP_LABEL[gname]}</div>`;
+    blocks.forEach(b=>{
+      const el = document.createElement('div');
+      el.className='block';
+      el.style.background = b.color;
+      el.textContent = labelPreview(b);
+      el.draggable = true;
+      el.dataset.blockType = b.key;
+      el.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', b.key);
+      });
+      wrap.appendChild(el);
+    });
+    palette.appendChild(wrap);
+  });
+}
+function labelPreview(def){
+  return def.label.replace(/\{(\w+)\}/g, (_,k)=>{
+    const f = def.fields.find(f=>f.key===k);
+    return f ? f.default : '';
+  });
+}
+
+/* ============ SCRIPT AREA (drop target) ============ */
+const canvasEl = document.getElementById('canvas');
+const scriptStackEl = document.getElementById('scriptStack');
+
+canvasEl.addEventListener('dragover', e=>{ if(selectedId) e.preventDefault(); });
+canvasEl.addEventListener('drop', e=>{
+  e.preventDefault();
+  if(!selectedId) return;
+  const type = e.dataTransfer.getData('text/plain');
+  if(!type || !BLOCK_DEFS[type]) return;
+  const obj = objects.find(o=>o.id===selectedId);
+  const def = BLOCK_DEFS[type];
+  const inst = {uid:'b'+Math.random().toString(36).slice(2,9), type, values:{}};
+  def.fields.forEach(f=>inst.values[f.key]=f.default);
+  obj.script.push(inst);
+  renderScriptArea();
+});
+
+function renderScriptArea(){
+  const obj = objects.find(o=>o.id===selectedId);
+  document.getElementById('script-empty').style.display = obj ? 'none' : 'block';
+  if(!obj){ scriptStackEl.style.display='none'; return; }
+  scriptStackEl.style.display='block';
+  scriptStackEl.innerHTML='';
+  if(obj.script.length===0){
+    const hint = document.createElement('div');
+    hint.style.cssText='color:var(--text-dim);font-size:12.5px;padding:10px;';
+    hint.textContent = 'لا توجد بلوكات بعد لهذا الجسم — اسحب بلوكًا من اليسار';
+    scriptStackEl.appendChild(hint);
+  }
+  obj.script.forEach((inst, i)=>{
+    const def = BLOCK_DEFS[inst.type];
+    const row = document.createElement('div');
+    row.className='stack-block';
+    row.style.background = def.color;
+
+    // build label with inline inputs
+    const parts = def.label.split(/(\{\w+\})/g);
+    parts.forEach(part=>{
+      const m = part.match(/^\{(\w+)\}$/);
+      if(m){
+        const key = m[1];
+        const f = def.fields.find(f=>f.key===key);
+        let input;
+        if(f.type==='num'){
+          input = document.createElement('input');
+          input.type='number'; input.step='any';
+          input.value = inst.values[key];
+          input.addEventListener('input', ()=>{ inst.values[key]=parseFloat(input.value)||0; });
+        } else if(f.type==='color'){
+          input = document.createElement('input');
+          input.type='color';
+          input.value = inst.values[key];
+          input.style.width='30px'; input.style.padding='0';
+          input.addEventListener('input', ()=>{ inst.values[key]=input.value; });
+        } else if(f.type==='select'){
+          input = document.createElement('select');
+          f.options.forEach(op=>{
+            const o = document.createElement('option'); o.value=op; o.textContent=op;
+            if(op===inst.values[key]) o.selected=true;
+            input.appendChild(o);
+          });
+          input.addEventListener('change', ()=>{ inst.values[key]=input.value; });
+        } else if(f.type==='text'){
+          input = document.createElement('input');
+          input.type='text';
+          input.value = inst.values[key];
+          input.style.width='90px';
+          input.addEventListener('input', ()=>{ inst.values[key]=input.value; });
+        }
+        row.appendChild(input);
+      } else if(part){
+        const span = document.createElement('span');
+        span.textContent = part;
+        row.appendChild(span);
+      }
+    });
+
+    const upBtn = document.createElement('button');
+    upBtn.className='edit-btn'; upBtn.textContent='▲'; upBtn.title='تحريك لأعلى';
+    upBtn.style.marginRight='4px';
+    upBtn.disabled = i===0;
+    upBtn.style.opacity = i===0 ? '0.3':'1';
+    upBtn.onclick = ()=>{ if(i>0){ [obj.script[i-1],obj.script[i]]=[obj.script[i],obj.script[i-1]]; renderScriptArea(); } };
+    row.appendChild(upBtn);
+
+    const downBtn = document.createElement('button');
+    downBtn.className='edit-btn'; downBtn.textContent='▼'; downBtn.title='تحريك لأسفل';
+    downBtn.disabled = i===obj.script.length-1;
+    downBtn.style.opacity = i===obj.script.length-1 ? '0.3':'1';
+    downBtn.onclick = ()=>{ if(i<obj.script.length-1){ [obj.script[i+1],obj.script[i]]=[obj.script[i],obj.script[i+1]]; renderScriptArea(); } };
+    row.appendChild(downBtn);
+
+    const dupBtn = document.createElement('button');
+    dupBtn.className='edit-btn'; dupBtn.textContent='⧉'; dupBtn.title='تكرار البلوك';
+    dupBtn.onclick = ()=>{ obj.script.splice(i+1,0,{uid:'b'+Math.random().toString(36).slice(2,9), type:inst.type, values:{...inst.values}}); renderScriptArea(); };
+    row.appendChild(dupBtn);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className='close'; closeBtn.textContent='✕';
+    closeBtn.onclick = ()=>{ obj.script.splice(i,1); renderScriptArea(); };
+    row.appendChild(closeBtn);
+
+    scriptStackEl.appendChild(row);
+  });
+}
+
+/* ============ RUNTIME EXECUTION ============ */
+// Sequential per-object instruction pointer executor.
+// Action blocks run for their own duration then advance; script stops when it
+// runs out of instructions (unless a repeat/loopForever block sends it back).
+// "Player" group blocks (movement/camera/jump control) are persistent and are
+// re-applied every frame regardless of the sequence pointer.
+function resetRuntimeState(obj){
+  obj._pc = 0;
+  obj._actionElapsed = 0;
+  obj._actionStartPos = null;
+  obj._actionStartQuat = null;
+  obj._actionStartOpacity = null;
+  obj._done = false;
+  obj._markDestroy = false;
+  obj._loopRemaining = {};
+  obj._loopStart = obj.script.findIndex(b=>!NONSEQUENCE_GROUPS.has(BLOCK_DEFS[b.type].group));
+  if(obj._loopStart < 0) obj._loopStart = 0;
+  obj._grounded = true;
+  obj._vy = 0;
+  hideBubble(obj);
+}
+
+function runObjectFrame(obj, dt){
+  // Persistent player-control blocks run every frame regardless of sequence state.
+  obj.script.forEach(inst=>{
+    const v = inst.values;
+    if(inst.type==='playerControl'){
+      const mv = joystick;
+      if(mv.x || mv.z){
+        const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
+        const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0,1,0)).normalize();
+        const move = new THREE.Vector3().addScaledVector(right, mv.x).addScaledVector(fwd, -mv.z);
+        obj.mesh.position.addScaledVector(move, v.spd*dt);
+        const targetAngle = Math.atan2(move.x, move.z);
+        obj.mesh.rotation.y = THREE.MathUtils.lerp(obj.mesh.rotation.y, targetAngle, 0.2);
+      }
+    } else if(inst.type==='cameraFollow'){
+      followTargetObj = obj; followDist = v.dist;
+    } else if(inst.type==='jumpButton'){
+      if(jumpPressed && obj._grounded){ obj._vy = Math.sqrt(2*9.8*v.h); obj._grounded=false; }
+      obj._vy -= 9.8*dt;
+      obj.mesh.position.y += obj._vy*dt;
+      if(obj.mesh.position.y <= obj.startPos.y){ obj.mesh.position.y = obj.startPos.y; obj._vy=0; obj._grounded=true; }
+    }
+  });
+
+  if(obj._done) return;
+
+  let guard = 0;
+  while(guard++ < 20){
+    if(obj._pc >= obj.script.length){ obj._done=true; hideBubble(obj); return; }
+    const inst = obj.script[obj._pc];
+    const def = BLOCK_DEFS[inst.type];
+    const v = inst.values;
+
+    if(NONSEQUENCE_GROUPS.has(def.group)){ obj._pc++; continue; }
+
+    if(inst.type==='stopScript'){ obj._done=true; hideBubble(obj); return; }
+    if(inst.type==='destroySelf'){ obj._done=true; obj._markDestroy=true; hideBubble(obj); return; }
+
+    if(inst.type==='repeat'){
+      const key=obj._pc;
+      if(obj._loopRemaining[key]===undefined) obj._loopRemaining[key]=v.n;
+      if(obj._loopRemaining[key]>0){ obj._loopRemaining[key]--; obj._pc = obj._loopStart; continue; }
+      obj._pc++; continue;
+    }
+    if(inst.type==='loopForever'){ obj._pc = obj._loopStart; continue; }
+
+    // action block with a duration
+    if(obj._actionElapsed===0){
+      obj._actionStartPos = obj.mesh.position.clone();
+      obj._actionStartQuat = obj.mesh.quaternion.clone();
+      obj._actionStartOpacity = obj.mesh.material.opacity;
+    }
+    const duration = inst.type==='spinTurn' ? Math.abs(360/v.spd) : (v.t!==undefined ? Math.max(v.t,0.0001) : 0);
+    const isInstant = INSTANT_BLOCKS.has(inst.type) || duration===0;
+    const progress = isInstant ? 1 : Math.min(obj._actionElapsed/duration, 1);
+
+    applyAction(obj, inst, dt, progress);
+
+    if(isInstant){ obj._pc++; obj._actionElapsed=0; continue; }
+    obj._actionElapsed += dt;
+    if(obj._actionElapsed >= duration){ obj._pc++; obj._actionElapsed=0; hideBubble(obj); }
+    break;
+  }
+}
+
+function applyAction(obj, inst, dt, progress){
+  const v = inst.values;
+  switch(inst.type){
+    case 'moveBy':
+      obj.mesh.position.x += v.x*dt; obj.mesh.position.y += v.y*dt; obj.mesh.position.z += v.z*dt;
+      break;
+    case 'rotateBy': {
+      const rad = THREE.MathUtils.degToRad(v.deg)*dt;
+      if(v.axis==='X') obj.mesh.rotation.x += rad;
+      else if(v.axis==='Y') obj.mesh.rotation.y += rad;
+      else obj.mesh.rotation.z += rad;
+      break;
+    }
+    case 'goTo':
+      obj.mesh.position.lerpVectors(obj._actionStartPos, new THREE.Vector3(v.x,v.y,v.z), progress);
+      break;
+    case 'bounce':
+      obj.mesh.position.y = obj._actionStartPos.y + Math.abs(Math.sin(obj._actionElapsed*v.s))*v.h;
+      break;
+    case 'wait':
+      break;
+    case 'setColor':
+      obj.mesh.material.color.set(v.c);
+      break;
+    case 'setScale':
+      obj.mesh.scale.set(v.s, v.s, v.s);
+      break;
+    case 'pulse': {
+      const s = 1 + Math.sin(obj._actionElapsed*v.spd)*v.amt;
+      obj.mesh.scale.set(s,s,s);
+      break;
+    }
+    case 'fadeOpacity':
+      obj.mesh.material.transparent = true;
+      obj.mesh.material.opacity = THREE.MathUtils.lerp(obj._actionStartOpacity, v.o, progress);
+      break;
+    case 'sayText':
+      showBubble(obj, v.text);
+      break;
+    case 'idleBreathe': {
+      const s = 1 + Math.sin(obj._actionElapsed*v.spd)*v.amt;
+      obj.mesh.scale.y = s;
+      break;
+    }
+    case 'walkBob':
+      obj.mesh.position.y = obj._actionStartPos.y + Math.abs(Math.sin(obj._actionElapsed*v.spd))*v.h;
+      break;
+    case 'jumpOnce':
+      obj.mesh.position.y = obj._actionStartPos.y + Math.sin(progress*Math.PI)*v.h;
+      break;
+    case 'spinTurn':
+      obj.mesh.rotation.y += THREE.MathUtils.degToRad(v.spd)*dt;
+      break;
+    case 'squash': {
+      const s = Math.sin(obj._actionElapsed*v.spd)*v.amt;
+      obj.mesh.scale.x = 1+s; obj.mesh.scale.z = 1-s;
+      break;
+    }
+    case 'lookAt': {
+      const m = new THREE.Matrix4().lookAt(obj.mesh.position, new THREE.Vector3(v.x,v.y,v.z), new THREE.Vector3(0,1,0));
+      const targetQuat = new THREE.Quaternion().setFromRotationMatrix(m);
+      obj.mesh.quaternion.slerpQuaternions(obj._actionStartQuat, targetQuat, progress);
+      break;
+    }
+  }
+}
+
+/* ============ SPEECH BUBBLES (sayText) ============ */
+const bubbleLayer = document.createElement('div');
+bubbleLayer.style.cssText='position:absolute;inset:0;pointer-events:none;overflow:hidden;';
+document.getElementById('viewportWrap').appendChild(bubbleLayer);
+function showBubble(obj, text){
+  if(!obj._bubbleEl){
+    const el = document.createElement('div');
+    el.style.cssText='position:absolute;transform:translate(-50%,-100%);background:#fff;color:#222;padding:3px 9px;border-radius:10px;font-size:11px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4);';
+    bubbleLayer.appendChild(el);
+    obj._bubbleEl = el;
+  }
+  obj._bubbleEl.textContent = text;
+  obj._bubbleEl.style.display='block';
+  const pos = obj.mesh.position.clone(); pos.y += 1;
+  pos.project(camera);
+  const rect = viewportEl.getBoundingClientRect();
+  obj._bubbleEl.style.left = ((pos.x*0.5+0.5)*rect.width)+'px';
+  obj._bubbleEl.style.top = ((-pos.y*0.5+0.5)*rect.height)+'px';
+}
+function hideBubble(obj){ if(obj._bubbleEl) obj._bubbleEl.style.display='none'; }
+
+/* ============ VIRTUAL JOYSTICK / JUMP BUTTON ============ */
+const joyBase = document.getElementById('joystickBase');
+const joyKnob = document.getElementById('joystickKnob');
+const jumpBtn = document.getElementById('jumpBtn');
+let joyActive = false, joyId = null, joyCenter = {x:0,y:0};
+
+function joyStart(x,y,id){
+  joyActive = true; joyId = id;
+  const r = joyBase.getBoundingClientRect();
+  joyCenter = {x:r.left+r.width/2, y:r.top+r.height/2};
+}
+function joyMove(x,y){
+  if(!joyActive) return;
+  let dx = x-joyCenter.x, dy = y-joyCenter.y;
+  const max = 34;
+  const dist = Math.min(Math.hypot(dx,dy), max);
+  const ang = Math.atan2(dy,dx);
+  const kx = Math.cos(ang)*dist, ky = Math.sin(ang)*dist;
+  joyKnob.style.transform = `translate(${kx-22}px, ${ky-22}px)`;
+  joystick.x = kx/max; joystick.z = ky/max;
+}
+function joyEnd(){
+  joyActive = false; joyId=null;
+  joyKnob.style.transform = 'translate(-50%,-50%)';
+  joystick.x=0; joystick.z=0;
+}
+joyBase.addEventListener('mousedown', e=>joyStart(e.clientX,e.clientY,'mouse'));
+window.addEventListener('mousemove', e=>{ if(joyId==='mouse') joyMove(e.clientX,e.clientY); });
+window.addEventListener('mouseup', e=>{ if(joyId==='mouse') joyEnd(); });
+joyBase.addEventListener('touchstart', e=>{ const t=e.changedTouches[0]; joyStart(t.clientX,t.clientY,t.identifier); e.preventDefault(); }, {passive:false});
+joyBase.addEventListener('touchmove', e=>{
+  for(const t of e.changedTouches){ if(t.identifier===joyId) joyMove(t.clientX,t.clientY); }
+  e.preventDefault();
+}, {passive:false});
+joyBase.addEventListener('touchend', e=>{
+  for(const t of e.changedTouches){ if(t.identifier===joyId) joyEnd(); }
+}, {passive:false});
+
+jumpBtn.addEventListener('mousedown', ()=>jumpPressed=true);
+jumpBtn.addEventListener('touchstart', e=>{ jumpPressed=true; e.preventDefault(); }, {passive:false});
+
+function updatePlayControlsVisibility(){
+  const anyPlayer = objects.some(o=>o.script.some(b=>b.type==='playerControl'));
+  const anyJump = objects.some(o=>o.script.some(b=>b.type==='jumpButton'));
+  joyBase.style.display = (running && anyPlayer) ? 'block' : 'none';
+  jumpBtn.style.display = (running && anyJump) ? 'block' : 'none';
+}
+
+/* ============ PLAY / STOP ============ */
+document.getElementById('playBtn').addEventListener('click', ()=>{
+  running = true;
+  objects.forEach(o=>{
+    o.startPos.copy(o.mesh.position);
+    o.startRot.copy(o.mesh.rotation);
+    resetRuntimeState(o);
+    o._colorSet=false;
+  });
+  document.getElementById('playBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='flex';
+  document.getElementById('runBadge').style.display='block';
+  updatePlayControlsVisibility();
+  document.querySelector('.mt-btn[data-panel="none"]')?.click();
+});
+document.getElementById('stopBtn').addEventListener('click', stopRun);
+function stopRun(){
+  running = false;
+  objects.forEach(o=>{
+    o.mesh.position.copy(o.startPos);
+    o.mesh.rotation.copy(o.startRot);
+    o.mesh.scale.set(1,1,1);
+    o._grounded=true; o._vy=0;
+  });
+  document.getElementById('playBtn').style.display='flex';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('runBadge').style.display='none';
+  joyEnd();
+  updatePlayControlsVisibility();
+}
+
+/* onClick events during run mode: trigger a little bump */
+renderer_click_hookup();
+function renderer_click_hookup(){
+  document.getElementById('viewport').addEventListener('click', e=>{
+    if(!running) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const m = new THREE.Vector2(
+      ((e.clientX-rect.left)/rect.width)*2-1,
+      -((e.clientY-rect.top)/rect.height)*2+1
+    );
+    raycaster.setFromCamera(m, camera);
+    const hits = raycaster.intersectObjects(objects.map(o=>o.mesh));
+    if(hits.length){
+      const obj = objects.find(o=>o.mesh===hits[0].object);
+      if(obj.script.some(b=>b.type==='onClick')){
+        obj.mesh.scale.multiplyScalar(1.25);
+        setTimeout(()=>{ if(running) obj.mesh.scale.multiplyScalar(1/1.25); }, 150);
+      }
+    }
+  });
+}
+
+/* ============ BOOTSTRAP ============ */
+initThree();
+buildPalette();
+addObject('box');
+addObject('sphere');
+objects[1].mesh.position.set(2,0.6,0);
+addObject('plane');
+selectNode(objects[0].id);
+</script>
+</body>
+</html>
